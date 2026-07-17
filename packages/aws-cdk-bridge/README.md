@@ -332,7 +332,9 @@ const bucket2 = bucketBridge.create(stack, "Bucket2", { versioned: false });
 
 ## Service-Specific Bridges
 
-For convenience, the package includes pre-built wrappers:
+For convenience, the package includes pre-built wrappers for common AWS resources:
+
+### S3 Bucket
 
 ```typescript
 import { Bucket } from "aws-cdk-bridge/s3";
@@ -348,7 +350,78 @@ console.log(bucket.bucketName);
 console.log(bucket.bucketId);
 ```
 
-These wrappers use `fromAwsCdk()` internally but provide a cleaner API.
+### Secrets Manager Secret
+
+```typescript
+import { Secret } from "aws-cdk-bridge/secretsmanager";
+
+const secret = new Secret(stack, "MySecret", {
+  secretName: "my-app-secret",
+  generateSecretString: {},
+});
+
+// Access Terraform outputs
+console.log(secret.secretName);
+console.log(secret.secretId);
+```
+
+### EC2 VPC
+
+```typescript
+import { Vpc } from "aws-cdk-bridge/ec2";
+
+const vpc = new Vpc(stack, "MyVpc", {
+  maxAzs: 2,
+  cidr: "10.0.0.0/16",
+});
+
+// Access Terraform outputs
+console.log(vpc.vpcId);
+console.log(vpc.cidrBlock);
+```
+
+### EC2 Subnet
+
+```typescript
+import { Subnet } from "aws-cdk-bridge/ec2";
+
+const subnet = new Subnet(stack, "MySubnet", {
+  vpcId: vpc.vpcId,
+  cidrBlock: "10.0.1.0/24",
+  availabilityZone: "us-east-1a",
+});
+
+// Access Terraform outputs
+console.log(subnet.subnetId);
+console.log(subnet.availabilityZone);
+```
+
+### Kinesis Stream
+
+```typescript
+import { Stream } from "aws-cdk-bridge/kinesis";
+import { StreamMode } from "aws-cdk-lib/aws-kinesis";
+
+const stream = new Stream(stack, "MyStream", {
+  streamName: "my-data-stream",
+  streamMode: StreamMode.PROVISIONED,
+  shardCount: 1,
+});
+
+// Access Terraform outputs
+console.log(stream.streamArn);
+console.log(stream.streamName);
+```
+
+### Supported Resources
+
+Currently supported AWS resources:
+- ✅ **S3**: Bucket
+- ✅ **Secrets Manager**: Secret
+- ✅ **EC2**: VPC, Subnet
+- ✅ **Kinesis**: Stream
+
+These wrappers use `fromAwsCdk()` internally but provide a cleaner API with proper TypeScript types and convenient property accessors.
 
 ## Testing
 

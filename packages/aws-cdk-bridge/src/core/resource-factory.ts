@@ -11,8 +11,9 @@
  * 4. Create CDKTN resource with converted properties
  */
 
+import { inspect } from "node:util";
 import type { Construct } from "constructs";
-import { Stack as CdkStack } from "aws-cdk-lib";
+import { Stack } from "aws-cdk-lib";
 import { CfnExpressionResolver, type ResolutionStrategy } from "./expression-resolver.ts";
 
 /**
@@ -39,11 +40,16 @@ export interface ConversionContext {
   id: string;
   /** CloudFormation metadata */
   cfnMetadata: CfnResourceMetadata;
+  /** Strategy for handling CloudFormation intrinsic functions */
+  resolutionStrategy?: ResolutionStrategy;
 }
 
-class Stack extends CdkStack {
+class AwsCdkStack extends Stack {
   toMedadata(): CfnResourceMetadata[] {
     const cfnTemplate = this._toCloudFormation();
+    console.debug("[Stack][toMedadata] cfnTemplate", inspect(cfnTemplate, {
+      depth: null, colors: true
+    }));
 
     // Extract all resources
     const resources = cfnTemplate.Resources || {};
@@ -84,7 +90,7 @@ export class TerraformResourceFactory {
     constructId: string = "Resource"
   ): CfnResourceMetadata[] {
     // Create isolated CDK scope
-    const stack = new Stack();
+    const stack = new AwsCdkStack();
 
     // Instantiate construct
     constructFn(stack, constructId);
@@ -105,6 +111,7 @@ export class TerraformResourceFactory {
     context?: {
       resolveRefs?: boolean;
       resolutionStrategy?: ResolutionStrategy;
+      resourceTypeMap?: Map<string, string>;
     }
   ): Record<string, any> {
     const converted: Record<string, any> = {};
@@ -116,7 +123,8 @@ export class TerraformResourceFactory {
     // Use expression resolver for intrinsic functions
     const resolver = new CfnExpressionResolver({
       strategy,
-      recursive: true
+      recursive: true,
+      resourceTypeMap: context?.resourceTypeMap
     });
 
     for (const [key, value] of Object.entries(properties)) {
@@ -202,13 +210,15 @@ export class TerraformResourceFactory {
    */
   static createTerraformResource<T = any>(
     context: ConversionContext,
-    resourceClass: new (scope: any, id: string, config?: any) => T
+    resourceClass: new (scope: any, id: string, config?: any) => T,
+    resourceTypeMap?: Map<string, string>
   ): T {
-    const { scope, id, cfnMetadata } = context;
+    const { scope, id, cfnMetadata, resolutionStrategy } = context;
 
     // Convert CloudFormation properties
     const tfConfig = this.convertProperties(cfnMetadata.properties, {
-      resolveRefs: true,
+      resolutionStrategy: resolutionStrategy || "skip",
+      resourceTypeMap,
     });
 
     // Create CDKTN resource

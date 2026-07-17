@@ -20,7 +20,7 @@ import { Bucket as CdkBucket, type BucketProps as CdkBucketProps } from "aws-cdk
 import { S3Bucket } from "../../../../.gen/providers/awscc/s3-bucket/index.ts";
 import { fromAwsCdk } from "../core/index.ts";
 
-export interface BucketProps extends CdkBucketProps {}
+export type BucketProps = CdkBucketProps;
 
 export class Bucket extends Construct {
   public readonly bucketArn: string;
@@ -34,10 +34,11 @@ export class Bucket extends Construct {
     // Use generic TerraformResource factory for automatic conversion
     this.resource = fromAwsCdk({
       scope: this,
-      id: "Resource",
+      id,
       constructFn: (cdkScope, cdkId) => new CdkBucket(cdkScope, cdkId, props),
       resourceClass: S3Bucket,
       cfnType: "AWS::S3::Bucket",
+      resolutionStrategy: "cfncompat",
     });
 
     // Expose Terraform outputs (these are native Terraform references)

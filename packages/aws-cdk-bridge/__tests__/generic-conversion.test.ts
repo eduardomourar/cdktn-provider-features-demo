@@ -1,5 +1,5 @@
 /**
- * Test generic CDK → CDKTN conversion using fromAwsCdk()
+ * Unit test: generic CDK → CDKTN conversion using fromAwsCdk()
  *
  * Demonstrates:
  * 1. Generic conversion API for any CDK resource

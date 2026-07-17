@@ -1,1 +1,1 @@
-export { Bucket, BucketProps } from "./bucket";
+export { Bucket, type BucketProps} from "./bucket.ts";

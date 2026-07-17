@@ -45,6 +45,8 @@ export interface ResolverOptions {
   strategy?: ResolutionStrategy;
   /** Whether to recursively process nested values */
   recursive?: boolean;
+  /** Map of CloudFormation logical IDs to their resource types (for resolving Refs) */
+  resourceTypeMap?: Map<string, string>;
 }
 
 /**
@@ -55,10 +57,12 @@ export interface ResolverOptions {
 export class CfnExpressionResolver {
   private readonly strategy: ResolutionStrategy;
   private readonly recursive: boolean;
+  private readonly resourceTypeMap: Map<string, string>;
 
   constructor(options: ResolverOptions = {}) {
     this.strategy = options.strategy ?? "skip";
     this.recursive = options.recursive ?? true;
+    this.resourceTypeMap = options.resourceTypeMap ?? new Map();
   }
 
   /**
@@ -168,6 +172,21 @@ export class CfnExpressionResolver {
   }
 
   /**
+   * Convert CloudFormation type to Terraform resource type
+   * AWS::S3::Bucket -> awscc_s3_bucket
+   * AWS::SecretsManager::Secret -> awscc_secretsmanager_secret
+   */
+  private cfnTypeToTerraformType(cfnType: string): string {
+    const parts = cfnType.split("::");
+    if (parts.length !== 3 || parts[0] !== "AWS") {
+      return cfnType.toLowerCase().replace(/::/g, "_");
+    }
+    const [, service, resource] = parts;
+    const snakeResource = resource.replace(/([A-Z])/g, "_$1").toLowerCase().replace(/^_/, "");
+    return `awscc_${service.toLowerCase()}_${snakeResource}`;
+  }
+
+  /**
    * Convert CloudFormation intrinsic to cfncompat provider function
    */
   private convertToCfncompat(intrinsic: CfnIntrinsic): string {
@@ -175,8 +194,26 @@ export class CfnExpressionResolver {
     // Format: provider::cfncompat::<function_name>()
 
     if ("Ref" in intrinsic) {
-      // References should be resolved at synthesis time, not here
-      return `\${var.${intrinsic.Ref}}`;
+      const ref = intrinsic.Ref;
+      // Handle AWS pseudo-parameters
+      if (ref === "AWS::Region") {
+        return "${data.aws_region.current.name}";
+      }
+      if (ref === "AWS::AccountId") {
+        return "${data.aws_caller_identity.current.account_id}";
+      }
+      if (ref === "AWS::StackName") {
+        return "${var.stack_name}";
+      }
+      // Regular resource references - convert logical ID to Terraform resource reference
+      // Look up the CloudFormation type to determine the Terraform resource type
+      const cfnType = this.resourceTypeMap.get(ref);
+      if (cfnType) {
+        const tfResourceType = this.cfnTypeToTerraformType(cfnType);
+        return `\${${tfResourceType}.${ref}.id}`;
+      }
+      // Fallback if type not found in map
+      return `\${var.${ref}}`;
     }
 
     if ("Fn::GetAtt" in intrinsic) {
@@ -187,13 +224,20 @@ export class CfnExpressionResolver {
 
     if ("Fn::Join" in intrinsic) {
       const [delimiter, parts] = intrinsic["Fn::Join"];
-      const resolvedParts = parts.map((p: any) => this.resolve(p));
+      const resolvedParts = parts.map((p: any) => {
+        const resolved = this.resolve(p);
+        // If it's a string literal, return it as-is; otherwise wrap provider functions
+        return typeof resolved === "string" && !resolved.startsWith("provider::")
+          ? resolved
+          : resolved;
+      });
       return `provider::cfncompat::join("${delimiter}", [${resolvedParts.join(", ")}])`;
     }
 
     if ("Fn::Split" in intrinsic) {
       const [delimiter, str] = intrinsic["Fn::Split"];
-      return `provider::cfncompat::split("${delimiter}", "${str}")`;
+      const resolvedStr = this.resolve(str);
+      return `provider::cfncompat::split("${delimiter}", ${resolvedStr})`;
     }
 
     if ("Fn::Select" in intrinsic) {

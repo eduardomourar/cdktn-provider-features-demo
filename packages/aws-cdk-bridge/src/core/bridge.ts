@@ -22,6 +22,7 @@ import {
   ResourceClassRegistry,
   type CfnResourceMetadata,
 } from "./resource-factory.ts";
+import type { ResolutionStrategy } from "./expression-resolver.ts";
 
 /**
  * Options for fromAwsCdk()
@@ -39,13 +40,17 @@ export interface FromOptions<T = any> {
   cfnType?: string;
   /** Index of resource if multiple resources are created (default: 0) */
   resourceIndex?: number;
+  /** Strategy for handling CloudFormation intrinsic functions (default: "skip") */
+  resolutionStrategy?: ResolutionStrategy;
 }
 
 /**
  * Create a CDKTN resource from a CDK construct
  *
  * This method uses introspection to automatically convert any CDK L1/L2
- * construct to the corresponding CDKTN resource.
+ * construct to the corresponding CDKTN resource. If the CDK construct creates
+ * multiple CloudFormation resources (nested resources), all are created as
+ * siblings in the CDKTN scope, and the primary resource is returned.
  *
  * @example
  * ```typescript
@@ -59,6 +64,19 @@ export interface FromOptions<T = any> {
  *   resourceClass: S3Bucket,
  * });
  * ```
+ *
+ * @example Multiple resources (L2 construct with nested resources)
+ * ```typescript
+ * const secret = fromAwsCdk({
+ *   scope: stack,
+ *   id: "Secrets",
+ *   constructFn: (scope, id) => {
+ *     const s1 = new Secret(scope, "Secret1", {});
+ *     new Secret(scope, "Secret2", { description: s1.secretName });
+ *   },
+ *   resourceIndex: 0, // Returns Secret1, but Secret2 is also created
+ * });
+ * ```
  */
 export const fromAwsCdk = <T = any>(options: FromOptions<T>): T => {
   const {
@@ -68,9 +86,10 @@ export const fromAwsCdk = <T = any>(options: FromOptions<T>): T => {
     resourceClass,
     cfnType,
     resourceIndex = 0,
+    resolutionStrategy = "skip",
   } = options;
 
-  // Extract CloudFormation metadata by synthesizing CDK construct
+  // Extract ALL CloudFormation resources by synthesizing CDK construct
   const metadata = TerraformResourceFactory.extractCfnMetadata(
     constructFn,
     id
@@ -82,19 +101,27 @@ export const fromAwsCdk = <T = any>(options: FromOptions<T>): T => {
     );
   }
 
-  // Find the target resource
+  // Build resource type map for resolving Refs across all resources
+  const resourceTypeMap = new Map<string, string>();
+  for (const meta of metadata) {
+    resourceTypeMap.set(meta.logicalId, meta.type);
+  }
+
+  // Find the target/primary resource
   let targetMetadata: CfnResourceMetadata;
+  let targetIndex: number;
 
   if (cfnType) {
     // Look for specific CloudFormation type
-    const found = metadata.find(m => m.type === cfnType);
-    if (!found) {
+    const foundIndex = metadata.findIndex(m => m.type === cfnType);
+    if (foundIndex === -1) {
       throw new Error(
         `CloudFormation resource type "${cfnType}" not found. ` +
         `Available types: ${metadata.map(m => m.type).join(", ")}`
       );
     }
-    targetMetadata = found;
+    targetIndex = foundIndex;
+    targetMetadata = metadata[foundIndex];
   } else {
     // Use resourceIndex
     if (resourceIndex >= metadata.length) {
@@ -103,27 +130,52 @@ export const fromAwsCdk = <T = any>(options: FromOptions<T>): T => {
         `Found ${metadata.length} resource(s): ${metadata.map(m => m.type).join(", ")}`
       );
     }
+    targetIndex = resourceIndex;
     targetMetadata = metadata[resourceIndex];
   }
 
-  // Look up resource class in registry
-  const toClass = resourceClass ?? ResourceClassRegistry.get(targetMetadata.type);
-  if (!toClass) {
+  // Create ALL resources in the scope (to maintain relationships)
+  let primaryResource: T | null = null;
+
+  for (let i = 0; i < metadata.length; i++) {
+    const meta = metadata[i];
+
+    // Look up resource class in registry or use provided one for target
+    const toClass = (i === targetIndex && resourceClass)
+      ? resourceClass
+      : ResourceClassRegistry.get(meta.type);
+
+    if (!toClass) {
+      console.warn(
+        `No CDKTN resource class registered for CloudFormation type "${meta.type}", skipping`
+      );
+      continue;
+    }
+
+    const resource = TerraformResourceFactory.createTerraformResource<T>(
+      {
+        scope,
+        id: meta.logicalId,
+        cfnMetadata: meta,
+        resolutionStrategy,
+      },
+      toClass,
+      resourceTypeMap
+    );
+
+    // Track the primary resource
+    if (i === targetIndex) {
+      primaryResource = resource;
+    }
+  }
+
+  if (!primaryResource) {
     throw new Error(
-      `No CDKTN resource class registered for CloudFormation type "${targetMetadata.type}". ` +
-      `Available types: ${ResourceClassRegistry.types().join(", ")}`
+      `Failed to create primary resource for CloudFormation type "${targetMetadata.type}"`
     );
   }
 
-  // Create CDKTN resource
-  return TerraformResourceFactory.createTerraformResource<T>(
-    {
-      scope,
-      id,
-      cfnMetadata: targetMetadata,
-    },
-    toClass
-  );
+  return primaryResource;
 };
 
 /**

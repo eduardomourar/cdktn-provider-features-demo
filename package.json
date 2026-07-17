@@ -33,6 +33,7 @@
     "check": "pnpm run generate:aws && pnpm run synth:all"
   },
   "dependencies": {
+    "aws-cdk-lib": "^2.261.0",
     "cdktn": "file:../cdk-terrain/packages/cdktn",
     "constructs": "10.6.0"
   },
