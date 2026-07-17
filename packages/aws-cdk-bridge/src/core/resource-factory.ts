@@ -42,10 +42,22 @@ export interface ConversionContext {
   cfnMetadata: CfnResourceMetadata;
   /** Strategy for handling CloudFormation intrinsic functions */
   resolutionStrategy?: ResolutionStrategy;
+  /** CloudFormation conditions from the template */
+  conditions?: Record<string, any>;
+  /** CloudFormation resource type (for xxxToTerraform mapper lookup) */
+  resourceType?: string;
+}
+
+/**
+ * Result of CloudFormation template extraction
+ */
+export interface CfnTemplateMetadata {
+  resources: CfnResourceMetadata[];
+  conditions: Record<string, any>;
 }
 
 class AwsCdkStack extends Stack {
-  toMedadata(): CfnResourceMetadata[] {
+  toMedadata(): CfnTemplateMetadata {
     const cfnTemplate = this._toCloudFormation();
     console.debug("[Stack][toMedadata] cfnTemplate", inspect(cfnTemplate, {
       depth: null, colors: true
@@ -70,8 +82,14 @@ class AwsCdkStack extends Stack {
       });
     }
 
-    return metadata;
-  } 
+    // Extract conditions
+    const conditions = cfnTemplate.Conditions || {};
+
+    return {
+      resources: metadata,
+      conditions,
+    };
+  }
 }
 
 /**
@@ -83,12 +101,12 @@ export class TerraformResourceFactory {
    *
    * @param constructFn Function that instantiates the CDK construct
    * @param constructId ID for the construct (used for extraction only)
-   * @returns CloudFormation resource metadata
+   * @returns CloudFormation template metadata (resources + conditions)
    */
   static extractCfnMetadata(
     constructFn: (scope: Construct, id: string) => void,
     constructId: string = "Resource"
-  ): CfnResourceMetadata[] {
+  ): CfnTemplateMetadata {
     // Create isolated CDK scope
     const stack = new AwsCdkStack();
 
@@ -112,6 +130,9 @@ export class TerraformResourceFactory {
       resolveRefs?: boolean;
       resolutionStrategy?: ResolutionStrategy;
       resourceTypeMap?: Map<string, string>;
+      scope?: Construct;
+      conditions?: Record<string, any>;
+      resourceType?: string;
     }
   ): Record<string, any> {
     const converted: Record<string, any> = {};
@@ -124,7 +145,10 @@ export class TerraformResourceFactory {
     const resolver = new CfnExpressionResolver({
       strategy,
       recursive: true,
-      resourceTypeMap: context?.resourceTypeMap
+      resourceTypeMap: context?.resourceTypeMap,
+      scope: context?.scope,
+      conditions: context?.conditions,
+      resourceType: context?.resourceType,
     });
 
     for (const [key, value] of Object.entries(properties)) {
@@ -133,7 +157,7 @@ export class TerraformResourceFactory {
       }
 
       // Resolve intrinsic functions
-      const resolvedValue = resolver.resolve(value);
+      const resolvedValue = resolver.resolve(value, [key]);
 
       if (resolvedValue !== undefined) {
         // Convert CloudFormation property name to camelCase if needed
@@ -213,12 +237,15 @@ export class TerraformResourceFactory {
     resourceClass: new (scope: any, id: string, config?: any) => T,
     resourceTypeMap?: Map<string, string>
   ): T {
-    const { scope, id, cfnMetadata, resolutionStrategy } = context;
+    const { scope, id, cfnMetadata, resolutionStrategy, conditions, resourceType } = context;
 
     // Convert CloudFormation properties
     const tfConfig = this.convertProperties(cfnMetadata.properties, {
       resolutionStrategy: resolutionStrategy || "skip",
       resourceTypeMap,
+      scope,
+      conditions,
+      resourceType,
     });
 
     // Create CDKTN resource

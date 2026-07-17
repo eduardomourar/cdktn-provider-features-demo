@@ -10,17 +10,11 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { monitor, provider } from "@cdktn/provider-datadog";
 import { TerraformStack, Testing } from "cdktn";
-import { AwsccProvider } from "../../../.gen/providers/awscc/provider/index.ts";
 import { Bucket } from "../src/s3/bucket.ts";
 
 test("Mix AWS CDK L2 (via bridge) with native Terraform constructs", () => {
   const app = Testing.app();
   const stack = new TerraformStack(app, "mixed-stack");
-
-  // Configure awscc provider
-  new AwsccProvider(stack, "awscc", {
-    region: "us-east-1",
-  });
 
   // AWS CDK L2 construct → CDKTN (transparent bridge)
   const bucket = new Bucket(stack, "DataBucket", {
@@ -55,11 +49,6 @@ test("E2E: CDK L2 → CDKTN → Terraform HCL (no CloudFormation in output)", ()
 
   const app = Testing.app();
   const stack = new TerraformStack(app, "e2e-stack");
-
-  // Configure awscc provider
-  new AwsccProvider(stack, "awscc", {
-    region: "us-east-1",
-  });
 
   // User code: instantiate real aws-cdk-lib construct
   const bucket = new Bucket(stack, "MyBucket", {

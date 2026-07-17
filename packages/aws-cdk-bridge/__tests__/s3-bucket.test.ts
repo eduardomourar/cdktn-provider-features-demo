@@ -10,17 +10,11 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { TerraformStack, Testing } from "cdktn";
-import { AwsccProvider } from "../../../.gen/providers/awscc/provider/index.ts";
 import { Bucket } from "../src/s3/bucket.ts";
 
 test("AWS CDK L2 Bucket bridges transparently to CDKTN", () => {
   const app = Testing.app();
   const stack = new TerraformStack(app, "test-stack");
-
-  // Configure awscc provider
-  new AwsccProvider(stack, "awscc", {
-    region: "us-east-1",
-  });
 
   // Use real aws-cdk-lib API, synthesizes to Terraform!
   const bucket = new Bucket(stack, "MyBucket", {
@@ -52,11 +46,6 @@ test("AWS CDK L2 Bucket bridges transparently to CDKTN", () => {
 test("Bridge preserves aws-cdk-lib BucketProps API", () => {
   const app = Testing.app();
   const stack = new TerraformStack(app, "api-test");
-
-  // Configure awscc provider
-  new AwsccProvider(stack, "awscc", {
-    region: "us-east-1",
-  });
 
   // All standard aws-cdk-lib.BucketProps should work
   const bucket = new Bucket(stack, "FullConfigBucket", {

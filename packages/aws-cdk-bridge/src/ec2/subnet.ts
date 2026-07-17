@@ -19,6 +19,7 @@ import { Construct } from "constructs";
 import { Subnet as CdkSubnet, type SubnetProps as CdkSubnetProps } from "aws-cdk-lib/aws-ec2";
 import { Ec2Subnet } from "../../../../.gen/providers/awscc/ec2-subnet/index.ts";
 import { fromAwsCdk } from "../core/index.ts";
+import { ensureProvidersLoaded } from "../core/provider-loader.ts";
 
 export type SubnetProps = CdkSubnetProps;
 
@@ -29,6 +30,9 @@ export class Subnet extends Construct {
 
   constructor(scope: Construct, id: string, props: SubnetProps) {
     super(scope, id);
+
+    // Automatically ensure required providers are loaded
+    ensureProvidersLoaded(scope);
 
     // Use generic TerraformResource factory for automatic conversion
     this.resource = fromAwsCdk({

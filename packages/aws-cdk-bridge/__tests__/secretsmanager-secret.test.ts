@@ -9,7 +9,6 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { Secret as CdkSecret } from "aws-cdk-lib/aws-secretsmanager";
 import { TerraformStack, Testing } from "cdktn";
-import { AwsccProvider } from "../../../.gen/providers/awscc/provider/index.ts";
 import { SecretsmanagerSecret } from "../../../.gen/providers/awscc/secretsmanager-secret/index.ts";
 import { fromAwsCdk, ResourceClassRegistry } from "../src/core/index.ts";
 import { Secret } from "../src/secretsmanager/secret.ts";
@@ -19,9 +18,6 @@ test("AWS CDK L2 Secret bridges transparently to CDKTN", () => {
   const stack = new TerraformStack(app, "test-stack");
 
   // Configure awscc provider
-  new AwsccProvider(stack, "awscc", {
-    region: "us-east-1",
-  });
 
   // Use real aws-cdk-lib API, synthesizes to Terraform!
   const secret = new Secret(stack, "MySecret", {
@@ -57,9 +53,6 @@ test("AWS CDK L2 Secret owned-secret name recovery is exercised", () => {
   ResourceClassRegistry.register("AWS::SecretsManager::Secret", SecretsmanagerSecret);
 
   // Configure awscc provider
-  new AwsccProvider(stack, "awscc", {
-    region: "us-east-1",
-  });
 
   // Demonstrate aws-cdk-bridge with multiple resources:
   // Create two secrets where the second references the first's secretName.

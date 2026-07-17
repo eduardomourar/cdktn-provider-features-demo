@@ -12,17 +12,12 @@ import { test } from "node:test";
 import assert from "node:assert";
 import { Bucket as CdkBucket } from "aws-cdk-lib/aws-s3";
 import { TerraformStack, Testing } from "cdktn";
-import { AwsccProvider } from "../../../../cdktn-provider-features-demo/.gen/providers/awscc/provider/index.ts";
 import { S3Bucket } from "../../../../cdktn-provider-features-demo/.gen/providers/awscc/s3-bucket/index.ts";
 import { convertProperties, fromAwsCdk, inspect, ResourceClassRegistry } from "../src/core/index.ts";
 
 test("fromAwsCdk() - explicit resource class", () => {
   const app = Testing.app();
   const stack = new TerraformStack(app, "test-stack");
-
-  new AwsccProvider(stack, "awscc", {
-    region: "us-east-1",
-  });
 
   // Generic conversion: CDK Bucket → CDKTN S3Bucket
   const bucket = fromAwsCdk({
@@ -54,7 +49,7 @@ test("fromAwsCdk() - explicit resource class", () => {
 
 test("inspect() - examine CloudFormation metadata", () => {
   // Inspect what CloudFormation resources a CDK construct creates
-  const metadata = inspect(
+  const result = inspect(
     (scope, id) =>
       new CdkBucket(scope, id, {
         versioned: true,
@@ -64,19 +59,23 @@ test("inspect() - examine CloudFormation metadata", () => {
   );
 
   console.log("\n=== CloudFormation Metadata ===");
-  console.log(JSON.stringify(metadata, null, 2));
+  console.log(JSON.stringify(result, null, 2));
 
   // Verify metadata structure
-  assert.ok(Array.isArray(metadata), "Metadata is an array");
-  assert.strictEqual(metadata.length, 1, "One resource created");
-  assert.strictEqual(metadata[0].type, "AWS::S3::Bucket", "Correct CloudFormation type");
-  assert.ok(metadata[0].properties, "Properties extracted");
-  assert.ok(metadata[0].logicalId, "Logical ID extracted");
+  assert.ok(result.resources, "Resources array exists");
+  assert.ok(Array.isArray(result.resources), "Resources is an array");
+  assert.strictEqual(result.resources.length, 1, "One resource created");
+  assert.strictEqual(result.resources[0].type, "AWS::S3::Bucket", "Correct CloudFormation type");
+  assert.ok(result.resources[0].properties, "Properties extracted");
+  assert.ok(result.resources[0].logicalId, "Logical ID extracted");
 
   // Verify properties
-  const props = metadata[0].properties;
+  const props = result.resources[0].properties;
   assert.ok(props.VersioningConfiguration, "Versioning configuration present");
   assert.ok(props.BucketName, "Bucket name present");
+
+  // Verify conditions (should be empty for this simple bucket)
+  assert.ok(result.conditions !== undefined, "Conditions object exists");
 });
 
 test("convertProperties() - property conversion", () => {
@@ -133,10 +132,6 @@ test("fromAwsCdk() - registry-based conversion", () => {
   const app = Testing.app();
   const stack = new TerraformStack(app, "registry-stack");
 
-  new AwsccProvider(stack, "awscc", {
-    region: "us-east-1",
-  });
-
   // Register S3Bucket class
   ResourceClassRegistry.register("AWS::S3::Bucket", S3Bucket);
 
@@ -165,7 +160,7 @@ test("fromAwsCdk() - registry-based conversion", () => {
 
 test("Complex CDK construct with multiple resources", () => {
   // Test construct that creates multiple CloudFormation resources
-  const metadata = inspect((scope, id) => {
+  const result = inspect((scope, id) => {
     const bucket = new CdkBucket(scope, `${id}Main`, {
       versioned: true,
     });
@@ -177,6 +172,8 @@ test("Complex CDK construct with multiple resources", () => {
 
     return bucket;
   }, "ComplexConstruct");
+
+  const metadata = result.resources;
 
   console.log("\n=== Multiple Resources ===");
   console.log(`Found ${metadata.length} resources:`);
@@ -192,7 +189,7 @@ test("Complex CDK construct with multiple resources", () => {
 });
 
 test("Handle CloudFormation intrinsic functions", () => {
-  const metadata = inspect(
+  const result = inspect(
     (scope, id) =>
       new CdkBucket(scope, id, {
         versioned: true,
@@ -201,7 +198,7 @@ test("Handle CloudFormation intrinsic functions", () => {
     "IntrinsicTest"
   );
 
-  const properties = metadata[0].properties;
+  const properties = result.resources[0].properties;
   console.log("\n=== Intrinsic Functions Handling ===");
   console.log("Raw CloudFormation properties:");
   console.log(JSON.stringify(properties, null, 2));
@@ -221,10 +218,6 @@ test("Handle CloudFormation intrinsic functions", () => {
 test("E2E: Generic conversion matches manual bridge", () => {
   const app = Testing.app();
   const stack = new TerraformStack(app, "e2e-generic");
-
-  new AwsccProvider(stack, "awscc", {
-    region: "us-east-1",
-  });
 
   // Generic conversion
   const genericBucket = fromAwsCdk({

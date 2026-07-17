@@ -19,6 +19,7 @@ import { Construct } from "constructs";
 import { Bucket as CdkBucket, type BucketProps as CdkBucketProps } from "aws-cdk-lib/aws-s3";
 import { S3Bucket } from "../../../../.gen/providers/awscc/s3-bucket/index.ts";
 import { fromAwsCdk } from "../core/index.ts";
+import { ensureProvidersLoaded } from "../core/provider-loader.ts";
 
 export type BucketProps = CdkBucketProps;
 
@@ -30,6 +31,9 @@ export class Bucket extends Construct {
 
   constructor(scope: Construct, id: string, props: BucketProps) {
     super(scope, id);
+
+    // Automatically ensure required providers are loaded
+    ensureProvidersLoaded(scope);
 
     // Use generic TerraformResource factory for automatic conversion
     this.resource = fromAwsCdk({

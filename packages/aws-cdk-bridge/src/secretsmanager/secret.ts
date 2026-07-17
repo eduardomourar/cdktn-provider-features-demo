@@ -19,6 +19,7 @@ import { Construct } from "constructs";
 import { Secret as CdkSecret, type SecretProps as CdkSecretProps } from "aws-cdk-lib/aws-secretsmanager";
 import { SecretsmanagerSecret } from "../../../../.gen/providers/awscc/secretsmanager-secret/index.ts";
 import { fromAwsCdk } from "../core/index.ts";
+import { ensureProvidersLoaded } from "../core/provider-loader.ts";
 
 export type SecretProps = CdkSecretProps;
 
@@ -29,6 +30,9 @@ export class Secret extends Construct {
 
   constructor(scope: Construct, id: string, props: SecretProps) {
     super(scope, id);
+
+    // Automatically ensure required providers are loaded
+    ensureProvidersLoaded(scope);
 
     // Use generic TerraformResource factory for automatic conversion
     this.resource = fromAwsCdk({

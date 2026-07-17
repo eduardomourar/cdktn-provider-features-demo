@@ -27,6 +27,7 @@ import { Ec2SubnetRouteTableAssociation } from "../../../../.gen/providers/awscc
 import { Ec2Vpc } from "../../../../.gen/providers/awscc/ec2-vpc/index.ts";
 import { Ec2VpcGatewayAttachment } from "../../../../.gen/providers/awscc/ec2-vpc-gateway-attachment/index.ts";
 import { fromAwsCdk, ResourceClassRegistry } from "../core/index.ts";
+import { ensureProvidersLoaded } from "../core/provider-loader.ts";
 
 export type VpcProps = CdkVpcProps;
 
@@ -35,8 +36,11 @@ export class Vpc extends Construct {
   public readonly cidrBlock: string;
   private readonly resource: Ec2Vpc;
 
-  constructor(scope: Construct, id: string, props: VpcProps = {}) {
+  constructor(scope: Construct, id: string, props: VpcProps) {
     super(scope, id);
+
+    // Automatically ensure required providers are loaded
+    ensureProvidersLoaded(scope);
 
     ResourceClassRegistry.register("AWS::EC2::EIP", Ec2Eip);
     ResourceClassRegistry.register("AWS::EC2::InternetGateway", Ec2InternetGateway);

@@ -29,15 +29,9 @@ import { TerraformResource } from "aws-cdk-bridge";
 import { Bucket as CdkBucket } from "aws-cdk-lib/aws-s3";
 import { S3Bucket } from ".gen/providers/awscc/s3-bucket";
 import { App, TerraformStack } from "cdktn";
-import { AwsccProvider } from ".gen/providers/awscc/provider";
 
 const app = new App();
 const stack = new TerraformStack(app, "my-stack");
-
-// Configure awscc provider
-new AwsccProvider(stack, "awscc", {
-  region: "us-east-1",
-});
 
 // Convert CDK Bucket to CDKTN S3Bucket
 const bucket = fromAwsCdk({
@@ -55,6 +49,8 @@ const bucket = fromAwsCdk({
 console.log("Bucket ARN:", bucket.arn);
 console.log("Bucket Name:", bucket.bucketName);
 ```
+
+**Note:** The convenience wrappers (`Bucket`, `Stream`, `Secret`, etc.) automatically configure required providers (aws, awscc, cfncompat) if they haven't been registered yet. For the generic `fromAwsCdk()` approach shown above, you may need to manually configure providers depending on your `resolutionStrategy`.
 
 ### Using the Registry
 
@@ -330,6 +326,29 @@ const bucket1 = bucketBridge.create(stack, "Bucket1", { versioned: true });
 const bucket2 = bucketBridge.create(stack, "Bucket2", { versioned: false });
 ```
 
+## Automatic Provider Loading
+
+The convenience wrappers automatically configure required providers if they haven't been registered yet:
+- **AwsProvider**: For data sources (e.g., `DataAwsRegion`)
+- **AwsccProvider**: For CloudControl-based resources
+- **CfncompatProvider**: For CloudFormation intrinsic function polyfills
+
+If you prefer manual provider configuration, just configure them before creating resources:
+
+```typescript
+import { AwsProvider } from ".gen/providers/aws/provider";
+import { AwsccProvider } from ".gen/providers/awscc/provider";
+import { CfncompatProvider } from ".gen/providers/cfncompat/provider";
+
+// Manual configuration (takes precedence)
+new AwsProvider(stack, "aws", { region: "us-west-2" });
+new AwsccProvider(stack, "awscc", { region: "us-west-2" });
+new CfncompatProvider(stack, "cfncompat", {});
+
+// Bridge will detect existing providers and not recreate them
+const bucket = new Bucket(stack, "MyBucket", { versioned: true });
+```
+
 ## Service-Specific Bridges
 
 For convenience, the package includes pre-built wrappers for common AWS resources:
@@ -433,17 +452,6 @@ npm test
 npm test -- __tests__/generic-conversion.test.ts
 ```
 
-## Examples
-
-See `src/examples/generic-usage.ts` for comprehensive examples:
-
-1. Basic conversion
-2. Registry-based conversion
-3. Inspection and debugging
-4. Complex constructs
-5. Property conversion
-6. Reusable wrappers
-
 ## Limitations
 
 - **awscc provider only**: Currently supports AWS resources via the awscc provider
@@ -453,7 +461,6 @@ See `src/examples/generic-usage.ts` for comprehensive examples:
 
 ## Roadmap
 
-- [ ] Support for more providers (Azure, GCP)
 - [ ] Cross-resource reference resolution
 - [ ] Optimized caching of synthesis results
 - [ ] CLI tool for generating bridge code

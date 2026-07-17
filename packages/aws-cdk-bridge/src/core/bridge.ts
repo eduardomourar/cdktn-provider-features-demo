@@ -90,10 +90,12 @@ export const fromAwsCdk = <T = any>(options: FromOptions<T>): T => {
   } = options;
 
   // Extract ALL CloudFormation resources by synthesizing CDK construct
-  const metadata = TerraformResourceFactory.extractCfnMetadata(
+  const templateMetadata = TerraformResourceFactory.extractCfnMetadata(
     constructFn,
     id
   );
+
+  const { resources: metadata, conditions } = templateMetadata;
 
   if (metadata.length === 0) {
     throw new Error(
@@ -158,6 +160,8 @@ export const fromAwsCdk = <T = any>(options: FromOptions<T>): T => {
         id: meta.logicalId,
         cfnMetadata: meta,
         resolutionStrategy,
+        conditions, // Pass conditions for Fn::If resolution
+        resourceType: meta.type, // Pass resource type for xxxToTerraform mapper lookup
       },
       toClass,
       resourceTypeMap
@@ -186,7 +190,7 @@ export const fromAwsCdk = <T = any>(options: FromOptions<T>): T => {
 export const inspect = (
   constructFn: (scope: Construct, id: string) => void,
   constructId: string = "Resource"
-): CfnResourceMetadata[] => {
+) => {
   return TerraformResourceFactory.extractCfnMetadata(constructFn, constructId);
 };
 
